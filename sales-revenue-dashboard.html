@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LEDGER — Sales &amp; Revenue Intelligence</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+  :root{
+    --paper:#EEF1F3;
+    --panel:#FFFFFF;
+    --ink:#10192B;
+    --ink-soft:#5B6779;
+    --line:#DCE1E6;
+    --teal:#0E7C66;
+    --teal-soft:#E3F1EE;
+    --rust:#C1440E;
+    --rust-soft:#FBEAE2;
+    --gold:#B9852E;
+    --gold-soft:#F6ECD9;
+    --radius:10px;
+    --shadow:0 1px 2px rgba(16,25,43,0.04), 0 8px 20px -12px rgba(16,25,43,0.12);
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;}
+  html,body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Inter',system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .num{font-family:'IBM Plex Mono',monospace; font-variant-numeric:tabular-nums;}
+  .app{min-height:100vh; display:flex; flex-direction:column;}
+
+  /* ---------- Header ---------- */
+  header.top{
+    padding:22px 28px 18px;
+    display:flex; align-items:baseline; justify-content:space-between; gap:16px;
+    border-bottom:1px solid var(--line);
+    flex-wrap:wrap;
+  }
+  .brand{display:flex; align-items:baseline; gap:10px;}
+  .brand .mark{
+    font-family:'Space Grotesk'; font-weight:700; font-size:20px; letter-spacing:0.02em;
+    background:var(--ink); color:var(--paper); padding:3px 8px; border-radius:4px;
+  }
+  .brand h1{font-family:'Space Grotesk'; font-weight:600; font-size:19px; margin:0; letter-spacing:-0.01em;}
+  .brand .sub{font-size:12.5px; color:var(--ink-soft);}
+  .header-actions{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
+  .btn{
+    font-family:'Inter'; font-size:13px; font-weight:500; cursor:pointer;
+    border:1px solid var(--line); background:var(--panel); color:var(--ink);
+    padding:8px 14px; border-radius:8px; transition:border-color .15s, background .15s;
+  }
+  .btn:hover{border-color:var(--ink);}
+  .btn.primary{background:var(--ink); color:var(--paper); border-color:var(--ink);}
+  .btn.primary:hover{background:#233252;}
+  .btn.ghost{background:transparent;}
+  input[type=file]{display:none;}
+
+  /* ---------- Ticker ---------- */
+  .ticker-wrap{
+    background:var(--ink); color:var(--paper); overflow:hidden; white-space:nowrap;
+    border-bottom:1px solid var(--line);
+  }
+  .ticker{
+    display:inline-block; padding:7px 0; font-family:'IBM Plex Mono'; font-size:12.5px;
+    animation: scroll-left 38s linear infinite;
+  }
+  .ticker span{padding:0 26px; color:#C7CEDA;}
+  .ticker span b{color:var(--paper); font-weight:600;}
+  .ticker .up{color:#6FD3B8 !important;}
+  .ticker .down{color:#E4977A !important;}
+  @keyframes scroll-left{ from{transform:translateX(0);} to{transform:translateX(-50%);} }
+
+  /* ---------- Layout ---------- */
+  .layout{flex:1; display:grid; grid-template-columns:250px 1fr; gap:0; align-items:start;}
+  @media (max-width:880px){ .layout{grid-template-columns:1fr;} }
+
+  aside.filters{
+    padding:22px 20px; border-right:1px solid var(--line); position:sticky; top:0;
+    align-self:start; min-height:calc(100vh - 84px);
+  }
+  @media (max-width:880px){ aside.filters{position:relative; min-height:auto; border-right:none; border-bottom:1px solid var(--line);} }
+
+  .filter-group{margin-bottom:22px;}
+  .filter-group h3{
+    font-family:'Space Grotesk'; font-size:11px; text-transform:uppercase; letter-spacing:0.09em;
+    color:var(--ink-soft); margin:0 0 10px;
+  }
+  .date-row{display:flex; flex-direction:column; gap:8px;}
+  .date-row label{font-size:11.5px; color:var(--ink-soft); display:block; margin-bottom:3px;}
+  input[type=date], input[type=text]{
+    width:100%; padding:8px 9px; border:1px solid var(--line); border-radius:7px;
+    font-family:'IBM Plex Mono'; font-size:12.5px; background:var(--panel); color:var(--ink);
+  }
+  .chip-list{display:flex; flex-direction:column; gap:6px;}
+  .chip{
+    display:flex; align-items:center; gap:8px; font-size:13px; padding:6px 8px; border-radius:7px;
+    cursor:pointer; user-select:none; border:1px solid transparent;
+  }
+  .chip:hover{background:var(--panel);}
+  .chip input{accent-color:var(--teal); width:14px; height:14px;}
+  .chip .swatch{width:8px; height:8px; border-radius:2px; flex-shrink:0;}
+  .filter-footer{display:flex; gap:8px; margin-top:6px;}
+  .filter-footer .btn{flex:1; text-align:center; font-size:12.5px; padding:8px 6px;}
+  .rowcount{font-size:11.5px; color:var(--ink-soft); margin-top:14px; border-top:1px solid var(--line); padding-top:12px;}
+
+  main{padding:24px 28px 60px;}
+
+  /* ---------- KPI cards ---------- */
+  .kpis{display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:14px; margin-bottom:22px;}
+  .kpi{
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:16px 16px 14px; box-shadow:var(--shadow); position:relative; overflow:hidden;
+  }
+  .kpi .label{font-size:11.5px; text-transform:uppercase; letter-spacing:0.07em; color:var(--ink-soft); margin-bottom:8px;}
+  .kpi .value{font-family:'IBM Plex Mono'; font-size:26px; font-weight:600; letter-spacing:-0.01em;}
+  .kpi .delta{font-size:12px; margin-top:6px; font-family:'IBM Plex Mono'; display:inline-flex; align-items:center; gap:4px; padding:2px 7px; border-radius:20px;}
+  .delta.up{color:var(--teal); background:var(--teal-soft);}
+  .delta.down{color:var(--rust); background:var(--rust-soft);}
+  .delta.flat{color:var(--ink-soft); background:var(--paper);}
+
+  /* ---------- Charts ---------- */
+  .grid{display:grid; grid-template-columns:1.6fr 1fr; gap:16px; margin-bottom:16px;}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;}
+  @media (max-width:1040px){ .grid, .grid2{grid-template-columns:1fr;} }
+  .panel{
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:18px 18px 10px; box-shadow:var(--shadow);
+  }
+  .panel h2{font-family:'Space Grotesk'; font-size:14.5px; font-weight:600; margin:0 0 2px;}
+  .panel .panel-sub{font-size:11.5px; color:var(--ink-soft); margin-bottom:10px;}
+  .chart-box{position:relative; height:260px;}
+  .chart-box.tall{height:300px;}
+
+  /* ---------- Table ---------- */
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  thead th{
+    text-align:left; font-family:'Space Grotesk'; font-size:11px; text-transform:uppercase;
+    letter-spacing:0.06em; color:var(--ink-soft); border-bottom:1px solid var(--line);
+    padding:9px 10px; cursor:pointer; white-space:nowrap;
+  }
+  thead th:hover{color:var(--ink);}
+  thead th.active{color:var(--ink);}
+  tbody td{padding:8px 10px; border-bottom:1px solid #EEF0F2; font-family:'IBM Plex Mono'; font-size:12.5px;}
+  tbody tr:hover{background:var(--paper);}
+  .tag{display:inline-block; padding:2px 8px; border-radius:20px; font-size:11px; font-family:'Inter'; font-weight:500;}
+  .table-scroll{max-height:420px; overflow:auto; border-radius:8px;}
+  .table-foot{display:flex; justify-content:space-between; align-items:center; padding:10px 4px 4px; font-size:11.5px; color:var(--ink-soft);}
+
+  footer{padding:18px 28px 30px; font-size:11.5px; color:var(--ink-soft); border-top:1px solid var(--line);}
+  .empty{padding:40px; text-align:center; color:var(--ink-soft); font-size:13px;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="top">
+    <div class="brand">
+      <span class="mark">$</span>
+      <div>
+        <h1>Ledger — Sales &amp; Revenue Intelligence</h1>
+        <div class="sub">Interactive dashboard · sample dataset auto-generated, or import your own</div>
+      </div>
+    </div>
+    <div class="header-actions">
+      <label class="btn" for="csvInput">Import CSV</label>
+      <input type="file" id="csvInput" accept=".csv">
+      <button class="btn" id="sampleBtn">Reload sample data</button>
+      <button class="btn primary" id="exportBtn">Export filtered CSV</button>
+    </div>
+  </header>
+
+  <div class="ticker-wrap"><div class="ticker" id="ticker"></div></div>
+
+  <div class="layout">
+    <aside class="filters">
+      <div class="filter-group">
+        <h3>Date range</h3>
+        <div class="date-row">
+          <div><label>From</label><input type="date" id="dateStart"></div>
+          <div><label>To</label><input type="date" id="dateEnd"></div>
+        </div>
+      </div>
+
+      <div class="filter-group">
+        <h3>Category</h3>
+        <div class="chip-list" id="categoryList"></div>
+      </div>
+
+      <div class="filter-group">
+        <h3>Region</h3>
+        <div class="chip-list" id="regionList"></div>
+      </div>
+
+      <div class="filter-group">
+        <h3>Product search</h3>
+        <input type="text" id="searchInput" placeholder="e.g. earbuds">
+      </div>
+
+      <div class="filter-footer">
+        <button class="btn" id="resetBtn">Reset filters</button>
+      </div>
+      <div class="rowcount" id="rowcount"></div>
+    </aside>
+
+    <main>
+      <div class="kpis" id="kpis"></div>
+
+      <div class="grid">
+        <div class="panel">
+          <h2>Revenue &amp; units trend</h2>
+          <div class="panel-sub">Monthly totals across the selected filters</div>
+          <div class="chart-box tall"><canvas id="trendChart"></canvas></div>
+        </div>
+        <div class="panel">
+          <h2>Revenue by category</h2>
+          <div class="panel-sub">Share of filtered revenue</div>
+          <div class="chart-box tall"><canvas id="categoryChart"></canvas></div>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="panel">
+          <h2>Top products</h2>
+          <div class="panel-sub">Ranked by revenue, filtered selection</div>
+          <div class="chart-box"><canvas id="productChart"></canvas></div>
+        </div>
+        <div class="panel">
+          <h2>Revenue by region</h2>
+          <div class="panel-sub">Regional performance, filtered selection</div>
+          <div class="chart-box"><canvas id="regionChart"></canvas></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Transactions</h2>
+        <div class="panel-sub">Click a column to sort · showing up to 300 most relevant rows</div>
+        <div class="table-scroll">
+          <table id="txTable">
+            <thead>
+              <tr>
+                <th data-key="date">Date</th>
+                <th data-key="product">Product</th>
+                <th data-key="category">Category</th>
+                <th data-key="region">Region</th>
+                <th data-key="units">Units</th>
+                <th data-key="revenue">Revenue</th>
+              </tr>
+            </thead>
+            <tbody id="txBody"></tbody>
+          </table>
+        </div>
+        <div class="table-foot"><span id="tableInfo"></span><span>Sorted by <b id="sortInfo">date</b></span></div>
+      </div>
+    </main>
+  </div>
+
+  <footer>Sample data is synthetically generated for demonstration. Import a CSV with columns like Date, Product, Category, Region, Units, Revenue to analyze your own data.</footer>
+</div>
+
+<script>
+/* ===================== DATA GENERATION ===================== */
+function mulberry32(seed){
+  return function(){
+    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const CATEGORY_COLORS = {
+  "Electronics":"#0E7C66",
+  "Apparel":"#C1440E",
+  "Home & Garden":"#B9852E",
+  "Sports & Outdoors":"#3B5BA5",
+  "Beauty & Care":"#8A4FBE",
+  "Books & Media":"#2E7D9A"
+};
+
+const PRODUCTS = [
+  {name:"Wireless Earbuds Pro", category:"Electronics", price:79},
+  {name:"4K Streaming Stick", category:"Electronics", price:39},
+  {name:"Smart Watch X2", category:"Electronics", price:149},
+  {name:"Portable SSD 1TB", category:"Electronics", price:89},
+  {name:"Bluetooth Speaker Mini", category:"Electronics", price:34},
+
+  {name:"Classic Denim Jacket", category:"Apparel", price:64},
+  {name:"Merino Wool Sweater", category:"Apparel", price:72},
+  {name:"Everyday Sneakers", category:"Apparel", price:58},
+  {name:"Running Shorts", category:"Apparel", price:28},
+  {name:"Rain Shell Jacket", category:"Apparel", price:95},
+
+  {name:"Ceramic Planter Set", category:"Home & Garden", price:36},
+  {name:"Cast Iron Skillet", category:"Home & Garden", price:44},
+  {name:"LED Desk Lamp", category:"Home & Garden", price:29},
+  {name:"Memory Foam Pillow", category:"Home & Garden", price:38},
+  {name:"Garden Tool Kit", category:"Home & Garden", price:52},
+
+  {name:"Yoga Mat Pro", category:"Sports & Outdoors", price:32},
+  {name:"Adjustable Dumbbells", category:"Sports & Outdoors", price:129},
+  {name:"Insulated Water Bottle", category:"Sports & Outdoors", price:22},
+  {name:"Trail Running Backpack", category:"Sports & Outdoors", price:68},
+  {name:"Camping Hammock", category:"Sports & Outdoors", price:41},
+
+  {name:"Vitamin C Serum", category:"Beauty & Care", price:26},
+  {name:"Bamboo Toothbrush Set", category:"Beauty & Care", price:14},
+  {name:"Argan Oil Shampoo", category:"Beauty & Care", price:18},
+  {name:"Facial Cleansing Brush", category:"Beauty & Care", price:33},
+  {name:"SPF 50 Sunscreen", category:"Beauty & Care", price:19},
+
+  {name:"Bestseller Novel Bundle", category:"Books & Media", price:31},
+  {name:"Productivity Planner 2026", category:"Books & Media", price:24},
+  {name:"Kids Picture Book Set", category:"Books & Media", price:27},
+  {name:"Cookbook: World Flavors", category:"Books & Media", price:35},
+  {name:"Graphic Novel Trilogy", category:"Books & Media", price:42}
+];
+const REGIONS = ["North","South","East","West","Central"];
+const CATEGORY_POP = {"Electronics":1.15,"Apparel":1.0,"Home & Garden":0.85,"Sports & Outdoors":0.8,"Beauty & Care":0.95,"Books & Media":0.6};
+
+function generateSampleData(){
+  const rng = mulberry32(42);
+  const start = new Date(2024,7,1);
+  const end = new Date(); end.setHours(0,0,0,0);
+  const records = [];
+  let id = 0;
+  for(let d = new Date(start); d <= end; d.setDate(d.getDate()+1)){
+    const dow = d.getDay();
+    const weekdayMult = (dow===0||dow===6) ? 1.35 : 1.0;
+    const month = d.getMonth();
+    const holidayMult = (month===10) ? 1.4 : (month===11 ? 1.9 : (month===0 ? 0.75 : 1.0));
+    const monthsSinceStart = (d.getFullYear()-start.getFullYear())*12 + (d.getMonth()-start.getMonth());
+    const trendMult = 1 + monthsSinceStart*0.012;
+    for(const p of PRODUCTS){
+      const lambda = 0.42 * weekdayMult * holidayMult * trendMult * CATEGORY_POP[p.category];
+      let events = Math.floor(lambda) + (rng() < (lambda % 1) ? 1 : 0);
+      for(let e=0;e<events;e++){
+        const region = REGIONS[Math.floor(rng()*REGIONS.length)];
+        const units = 1 + Math.floor(rng()*5);
+        const discount = rng()*0.15;
+        const revenue = +(units*p.price*(1-discount)).toFixed(2);
+        records.push({
+          id: id++,
+          date: new Date(d),
+          product: p.name,
+          category: p.category,
+          region: region,
+          units: units,
+          revenue: revenue
+        });
+      }
+    }
+  }
+  return records;
+}
+
+/* ===================== STATE ===================== */
+let ALL = [];               // all records
+let CATEGORIES = [];
+let filters = { start:null, end:null, categories:new Set(), regions:new Set(), search:"" };
+let sortState = { key:"date", dir:"desc" };
+let charts = {};
+
+function fmtMoney(n){
+  return "$" + n.toLocaleString("en-US",{maximumFractionDigits:0});
+}
+function fmtMoney2(n){
+  return "$" + n.toLocaleString("en-US",{minimumFractionDigits:2, maximumFractionDigits:2});
+}
+function fmtDate(d){
+  return d.toISOString().slice(0,10);
+}
+
+/* ===================== INIT ===================== */
+function initFromData(records){
+  ALL = records;
+  CATEGORIES = [...new Set(ALL.map(r=>r.category))];
+  const regionsPresent = [...new Set(ALL.map(r=>r.region))];
+
+  filters.categories = new Set(CATEGORIES);
+  filters.regions = new Set(regionsPresent);
+  filters.search = "";
+
+  const dates = ALL.map(r=>r.date.getTime());
+  const minD = new Date(Math.min(...dates));
+  const maxD = new Date(Math.max(...dates));
+  filters.start = minD;
+  filters.end = maxD;
+  document.getElementById('dateStart').value = fmtDate(minD);
+  document.getElementById('dateEnd').value = fmtDate(maxD);
+  document.getElementById('dateStart').min = fmtDate(minD);
+  document.getElementById('dateStart').max = fmtDate(maxD);
+  document.getElementById('dateEnd').min = fmtDate(minD);
+  document.getElementById('dateEnd').max = fmtDate(maxD);
+  document.getElementById('searchInput').value = "";
+
+  buildChipList('categoryList', CATEGORIES, filters.categories, c => CATEGORY_COLORS[c] || '#7A869A');
+  buildChipList('regionList', regionsPresent, filters.regions, () => '#7A869A');
+
+  renderAll();
+}
+
+function buildChipList(containerId, items, selectedSet, colorFn){
+  const el = document.getElementById(containerId);
+  el.innerHTML = "";
+  items.forEach(item => {
+    const label = document.createElement('label');
+    label.className = 'chip';
+    label.innerHTML = `<input type="checkbox" ${selectedSet.has(item)?'checked':''}>
+      <span class="swatch" style="background:${colorFn(item)}"></span>${item}`;
+    label.querySelector('input').addEventListener('change', e=>{
+      if(e.target.checked) selectedSet.add(item); else selectedSet.delete(item);
+      renderAll();
+    });
+    el.appendChild(label);
+  });
+}
+
+/* ===================== FILTERING ===================== */
+function getFiltered(){
+  const s = filters.start ? filters.start.getTime() : -Infinity;
+  const e = filters.end ? filters.end.getTime() + 86399999 : Infinity;
+  const search = filters.search.trim().toLowerCase();
+  return ALL.filter(r=>{
+    const t = r.date.getTime();
+    if(t < s || t > e) return false;
+    if(!filters.categories.has(r.category)) return false;
+    if(!filters.regions.has(r.region)) return false;
+    if(search && !r.product.toLowerCase().includes(search)) return false;
+    return true;
+  });
+}
+
+function getPriorPeriod(filtered){
+  if(!filters.start || !filters.end) return [];
+  const span = filters.end.getTime() - filters.start.getTime();
+  const priorEnd = new Date(filters.start.getTime() - 86400000);
+  const priorStart = new Date(priorEnd.getTime() - span);
+  const ps = priorStart.getTime(), pe = priorEnd.getTime() + 86399999;
+  return ALL.filter(r=>{
+    const t = r.date.getTime();
+    if(t < ps || t > pe) return false;
+    if(!filters.categories.has(r.category)) return false;
+    if(!filters.regions.has(r.region)) return false;
+    return true;
+  });
+}
+
+/* ===================== RENDER: KPIs ===================== */
+function renderKPIs(filtered, prior){
+  const totalRevenue = filtered.reduce((a,r)=>a+r.revenue,0);
+  const totalUnits = filtered.reduce((a,r)=>a+r.units,0);
+  const orders = filtered.length;
+  const aov = orders ? totalRevenue/orders : 0;
+
+  const priorRevenue = prior.reduce((a,r)=>a+r.revenue,0);
+  const priorOrders = prior.length;
+
+  const topProductMap = {};
+  filtered.forEach(r=> topProductMap[r.product] = (topProductMap[r.product]||0) + r.revenue);
+  let topProduct = "—", topVal = 0;
+  Object.entries(topProductMap).forEach(([k,v])=>{ if(v>topVal){topVal=v; topProduct=k;} });
+
+  function deltaPct(cur, prev){
+    if(!prev) return null;
+    return ((cur-prev)/prev)*100;
+  }
+  function deltaHTML(pct){
+    if(pct===null) return `<span class="delta flat">no prior data</span>`;
+    const dir = pct>0.05 ? 'up' : (pct<-0.05 ? 'down' : 'flat');
+    const arrow = dir==='up' ? '▲' : (dir==='down' ? '▼' : '·');
+    return `<span class="delta ${dir}">${arrow} ${Math.abs(pct).toFixed(1)}% vs prior period</span>`;
+  }
+
+  const cards = [
+    {label:"Total revenue", value: fmtMoney(totalRevenue), delta: deltaHTML(deltaPct(totalRevenue, priorRevenue))},
+    {label:"Units sold", value: totalUnits.toLocaleString(), delta: deltaHTML(deltaPct(totalUnits, prior.reduce((a,r)=>a+r.units,0)))},
+    {label:"Orders", value: orders.toLocaleString(), delta: deltaHTML(deltaPct(orders, priorOrders))},
+    {label:"Avg. order value", value: fmtMoney2(aov), delta: deltaHTML(deltaPct(aov, priorOrders? priorRevenue/priorOrders : 0))},
+    {label:"Top product", value: `<span style="font-size:16px; font-family:'Inter'; font-weight:600;">${topProduct}</span>`, delta: `<span class="delta flat">${fmtMoney(topVal)} revenue</span>`}
+  ];
+
+  document.getElementById('kpis').innerHTML = cards.map(c=>`
+    <div class="kpi">
+      <div class="label">${c.label}</div>
+      <div class="value">${c.value}</div>
+      <div>${c.delta}</div>
+    </div>
+  `).join('');
+}
+
+/* ===================== RENDER: CHARTS ===================== */
+function monthKey(d){ return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0'); }
+function monthLabel(key){
+  const [y,m] = key.split('-');
+  return new Date(+y, +m-1, 1).toLocaleDateString('en-US',{month:'short', year:'2-digit'});
+}
+
+function renderTrendChart(filtered){
+  const byMonth = {};
+  filtered.forEach(r=>{
+    const k = monthKey(r.date);
+    if(!byMonth[k]) byMonth[k] = {revenue:0, units:0};
+    byMonth[k].revenue += r.revenue;
+    byMonth[k].units += r.units;
+  });
+  const keys = Object.keys(byMonth).sort();
+  const labels = keys.map(monthLabel);
+  const revenueData = keys.map(k=>Math.round(byMonth[k].revenue));
+  const unitsData = keys.map(k=>byMonth[k].units);
+
+  const ctx = document.getElementById('trendChart');
+  if(charts.trend) charts.trend.destroy();
+  charts.trend = new Chart(ctx, {
+    type:'line',
+    data:{
+      labels,
+      datasets:[
+        {
+          label:'Revenue', data: revenueData, yAxisID:'y', borderColor:'#0E7C66',
+          backgroundColor:'rgba(14,124,102,0.08)', fill:true, tension:0.3, pointRadius:2, borderWidth:2
+        },
+        {
+          label:'Units', data: unitsData, yAxisID:'y1', borderColor:'#B9852E',
+          backgroundColor:'rgba(185,133,46,0.06)', fill:false, tension:0.3, pointRadius:2, borderWidth:2, borderDash:[4,3]
+        }
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      interaction:{mode:'index', intersect:false},
+      plugins:{ legend:{position:'top', align:'end', labels:{boxWidth:10, font:{family:'Inter', size:11.5}}},
+        tooltip:{callbacks:{ label: ctx => ctx.dataset.label==='Revenue' ? ' Revenue: '+fmtMoney(ctx.raw) : ' Units: '+ctx.raw.toLocaleString() }} },
+      scales:{
+        x:{ grid:{display:false}, ticks:{font:{family:'IBM Plex Mono', size:10.5}} },
+        y:{ position:'left', grid:{color:'#EEF0F2'}, ticks:{ font:{family:'IBM Plex Mono', size:10.5}, callback:v=>fmtMoney(v)} },
+        y1:{ position:'right', grid:{display:false}, ticks:{ font:{family:'IBM Plex Mono', size:10.5} } }
+      }
+    }
+  });
+}
+
+function renderCategoryChart(filtered){
+  const byCat = {};
+  filtered.forEach(r=> byCat[r.category] = (byCat[r.category]||0) + r.revenue);
+  const cats = Object.keys(byCat).sort((a,b)=>byCat[b]-byCat[a]);
+  const data = cats.map(c=>byCat[c]);
+  const colors = cats.map(c=>CATEGORY_COLORS[c] || '#7A869A');
+
+  const ctx = document.getElementById('categoryChart');
+  if(charts.category) charts.category.destroy();
+  charts.category = new Chart(ctx, {
+    type:'doughnut',
+    data:{ labels:cats, datasets:[{ data, backgroundColor:colors, borderColor:'#fff', borderWidth:2 }] },
+    options:{
+      responsive:true, maintainAspectRatio:false, cutout:'62%',
+      plugins:{
+        legend:{ position:'right', labels:{ boxWidth:10, font:{family:'Inter', size:11.5}, usePointStyle:true } },
+        tooltip:{ callbacks:{ label: ctx => ` ${ctx.label}: ${fmtMoney(ctx.raw)}` } }
+      }
+    }
+  });
+}
+
+function renderProductChart(filtered){
+  const byProduct = {};
+  filtered.forEach(r=> byProduct[r.product] = (byProduct[r.product]||0) + r.revenue);
+  const sorted = Object.entries(byProduct).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  const labels = sorted.map(x=>x[0]);
+  const data = sorted.map(x=>Math.round(x[1]));
+  const productCat = {};
+  PRODUCTS.forEach(p=>productCat[p.name]=p.category);
+  const colors = labels.map(l=>CATEGORY_COLORS[productCat[l]] || '#7A869A');
+
+  const ctx = document.getElementById('productChart');
+  if(charts.product) charts.product.destroy();
+  charts.product = new Chart(ctx, {
+    type:'bar',
+    data:{ labels, datasets:[{ data, backgroundColor:colors, borderRadius:4, barThickness:14 }] },
+    options:{
+      indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label: ctx => ' '+fmtMoney(ctx.raw) } } },
+      scales:{
+        x:{ grid:{color:'#EEF0F2'}, ticks:{ font:{family:'IBM Plex Mono', size:10}, callback:v=>fmtMoney(v)} },
+        y:{ grid:{display:false}, ticks:{ font:{family:'Inter', size:11} } }
+      }
+    }
+  });
+}
+
+function renderRegionChart(filtered){
+  const byRegion = {};
+  filtered.forEach(r=> byRegion[r.region] = (byRegion[r.region]||0) + r.revenue);
+  const regions = Object.keys(byRegion).sort((a,b)=>byRegion[b]-byRegion[a]);
+  const data = regions.map(r=>Math.round(byRegion[r]));
+
+  const ctx = document.getElementById('regionChart');
+  if(charts.region) charts.region.destroy();
+  charts.region = new Chart(ctx, {
+    type:'bar',
+    data:{ labels:regions, datasets:[{ data, backgroundColor:'#3B5BA5', borderRadius:5, maxBarThickness:46 }] },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label: ctx => ' '+fmtMoney(ctx.raw) } } },
+      scales:{
+        x:{ grid:{display:false}, ticks:{ font:{family:'Inter', size:11.5} } },
+        y:{ grid:{color:'#EEF0F2'}, ticks:{ font:{family:'IBM Plex Mono', size:10.5}, callback:v=>fmtMoney(v)} }
+      }
+    }
+  });
+}
+
+/* ===================== RENDER: TABLE ===================== */
+function renderTable(filtered){
+  const key = sortState.key, dir = sortState.dir;
+  const sorted = [...filtered].sort((a,b)=>{
+    let av = a[key], bv = b[key];
+    if(key==='date'){ av = av.getTime(); bv = bv.getTime(); }
+    if(typeof av === 'string'){ av = av.toLowerCase(); bv = bv.toLowerCase(); }
+    if(av < bv) return dir==='asc' ? -1 : 1;
+    if(av > bv) return dir==='asc' ? 1 : -1;
+    return 0;
+  });
+  const shown = sorted.slice(0,300);
+
+  document.getElementById('txBody').innerHTML = shown.map(r=>`
+    <tr>
+      <td>${fmtDate(r.date)}</td>
+      <td style="font-family:'Inter'; font-size:12.5px;">${r.product}</td>
+      <td><span class="tag" style="background:${(CATEGORY_COLORS[r.category]||'#7A869A')+'22'}; color:${CATEGORY_COLORS[r.category]||'#5B6779'}">${r.category}</span></td>
+      <td>${r.region}</td>
+      <td>${r.units}</td>
+      <td>${fmtMoney2(r.revenue)}</td>
+    </tr>
+  `).join('') || '';
+
+  if(!shown.length){
+    document.getElementById('txBody').innerHTML = `<tr><td colspan="6" class="empty">No transactions match the current filters.</td></tr>`;
+  }
+
+  document.querySelectorAll('#txTable thead th').forEach(th=>{
+    th.classList.toggle('active', th.dataset.key === key);
+    const base = th.textContent.replace(/ [▲▼]$/,'');
+    th.textContent = base;
+    if(th.dataset.key === key){ th.textContent = base + (dir==='asc' ? ' ▲' : ' ▼'); }
+  });
+
+  document.getElementById('tableInfo').textContent = `Showing ${shown.length.toLocaleString()} of ${filtered.length.toLocaleString()} rows`;
+  document.getElementById('sortInfo').textContent = key;
+}
+
+/* ===================== RENDER: TICKER ===================== */
+function renderTicker(filtered){
+  const totalRevenue = filtered.reduce((a,r)=>a+r.revenue,0);
+  const byCat = {};
+  filtered.forEach(r=> byCat[r.category] = (byCat[r.category]||0) + r.revenue);
+  const catEntries = Object.entries(byCat).sort((a,b)=>b[1]-a[1]);
+  const byRegion = {};
+  filtered.forEach(r=> byRegion[r.region] = (byRegion[r.region]||0) + r.revenue);
+  const regionEntries = Object.entries(byRegion).sort((a,b)=>b[1]-a[1]);
+
+  let items = [`<span><b>TOTAL REVENUE</b> ${fmtMoney(totalRevenue)}</span>`];
+  catEntries.forEach(([c,v])=> items.push(`<span>${c.toUpperCase()} <b>${fmtMoney(v)}</b></span>`));
+  regionEntries.forEach(([r,v])=> items.push(`<span class="up">${r.toUpperCase()} REGION <b>${fmtMoney(v)}</b></span>`));
+
+  const html = items.join('') ;
+  document.getElementById('ticker').innerHTML = html + html; // duplicate for seamless loop
+}
+
+/* ===================== ORCHESTRATION ===================== */
+function renderAll(){
+  const filtered = getFiltered();
+  const prior = getPriorPeriod(filtered);
+  document.getElementById('rowcount').textContent = `${filtered.length.toLocaleString()} of ${ALL.length.toLocaleString()} records match current filters`;
+  renderKPIs(filtered, prior);
+  renderTrendChart(filtered);
+  renderCategoryChart(filtered);
+  renderProductChart(filtered);
+  renderRegionChart(filtered);
+  renderTable(filtered);
+  renderTicker(filtered);
+}
+
+/* ===================== EVENTS ===================== */
+document.getElementById('dateStart').addEventListener('change', e=>{
+  filters.start = e.target.value ? new Date(e.target.value) : null;
+  renderAll();
+});
+document.getElementById('dateEnd').addEventListener('change', e=>{
+  filters.end = e.target.value ? new Date(e.target.value) : null;
+  renderAll();
+});
+let searchDebounce;
+document.getElementById('searchInput').addEventListener('input', e=>{
+  clearTimeout(searchDebounce);
+  searchDebounce = setTimeout(()=>{ filters.search = e.target.value; renderAll(); }, 180);
+});
+document.getElementById('resetBtn').addEventListener('click', ()=>{ initFromData(ALL); });
+document.getElementById('sampleBtn').addEventListener('click', ()=>{ initFromData(generateSampleData()); });
+
+document.querySelectorAll('#txTable thead th').forEach(th=>{
+  th.addEventListener('click', ()=>{
+    const key = th.dataset.key;
+    if(sortState.key === key){ sortState.dir = sortState.dir === 'asc' ? 'desc' : 'asc'; }
+    else { sortState.key = key; sortState.dir = key==='date' ? 'desc' : 'desc'; }
+    renderTable(getFiltered());
+  });
+});
+
+document.getElementById('exportBtn').addEventListener('click', ()=>{
+  const filtered = getFiltered();
+  const header = ['Date','Product','Category','Region','Units','Revenue'];
+  const rows = filtered.map(r=>[fmtDate(r.date), r.product, r.category, r.region, r.units, r.revenue.toFixed(2)]);
+  const csv = [header, ...rows].map(row => row.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'filtered_sales_data.csv'; a.click();
+  URL.revokeObjectURL(url);
+});
+
+document.getElementById('csvInput').addEventListener('change', e=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  Papa.parse(file, {
+    header:true, skipEmptyLines:true,
+    complete: results => {
+      const cols = results.meta.fields || [];
+      const find = re => cols.find(c => re.test(c));
+      const dateCol = find(/date/i);
+      const productCol = find(/product|item|sku/i);
+      const categoryCol = find(/category|cat\b/i);
+      const regionCol = find(/region|state|area|territory/i);
+      const unitsCol = find(/unit|qty|quantity/i);
+      const revenueCol = find(/revenue|sales(?!person)|amount|total/i);
+      const priceCol = find(/price/i);
+
+      if(!dateCol || !productCol){
+        alert('Could not detect Date and Product columns in this CSV. Expected headers like Date, Product, Category, Region, Units, Revenue.');
+        return;
+      }
+
+      const records = [];
+      results.data.forEach((row,i)=>{
+        const d = new Date(row[dateCol]);
+        if(isNaN(d.getTime())) return;
+        const units = unitsCol ? (parseFloat(row[unitsCol]) || 1) : 1;
+        let revenue = revenueCol ? parseFloat(row[revenueCol]) : NaN;
+        if(isNaN(revenue) && priceCol){ revenue = units * (parseFloat(row[priceCol])||0); }
+        if(isNaN(revenue)) revenue = 0;
+        records.push({
+          id:i,
+          date:d,
+          product: row[productCol] || 'Unknown',
+          category: categoryCol ? (row[categoryCol] || 'Uncategorized') : 'Uncategorized',
+          region: regionCol ? (row[regionCol] || 'Unspecified') : 'Unspecified',
+          units: units,
+          revenue: revenue
+        });
+      });
+
+      if(!records.length){ alert('No valid rows found in this file.'); return; }
+
+      // assign colors to any new categories on the fly
+      const newCats = [...new Set(records.map(r=>r.category))];
+      const palette = ['#0E7C66','#C1440E','#B9852E','#3B5BA5','#8A4FBE','#2E7D9A','#A15D3B','#5C7A29'];
+      newCats.forEach((c,i)=>{ if(!CATEGORY_COLORS[c]) CATEGORY_COLORS[c] = palette[i % palette.length]; });
+
+      initFromData(records);
+    }
+  });
+});
+
+/* ===================== BOOT ===================== */
+initFromData(generateSampleData());
+</script>
+</body>
+</html>
